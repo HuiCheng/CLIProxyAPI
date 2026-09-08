@@ -22,7 +22,10 @@
 
 - **本地读取。** 对下列路径各 `GET` 一次，保存到 `management-settings/<name>.txt`。期望 HTTP `200`。
 
-  `config.yaml`、`debug`、`logging-to-file`、`logs-max-total-size-mb`、`error-logs-max-files`、`usage-statistics-enabled`、`proxy-url`、`quota-exceeded/switch-project`、`quota-exceeded/switch-preview-model`、`api-key-usage`、`usage-queue`、`gemini-api-key`、`interactions-api-key`、`logs`、`request-error-logs`、`request-log`、`ws-auth`、`request-retry`、`max-retry-credentials`、`max-retry-interval`、`force-model-prefix`、`routing/strategy`、`claude-api-key`、`codex-api-key`、`xai-api-key`、`openai-compatibility`、`vertex-api-key`、`oauth-excluded-models`、`oauth-model-alias`、`oauth-request-scoped-errors`、`auth-files/models`、`get-auth-status`、`plugins`。
+  `config.yaml`、`debug`、`logging-to-file`、`logs-max-total-size-mb`、`error-logs-max-files`、`usage-statistics-enabled`、`proxy-url`、`quota-exceeded/switch-project`、`quota-exceeded/switch-preview-model`、`api-key-usage`、`usage-queue`、`gemini-api-key`、`interactions-api-key`、`request-error-logs`、`request-log`、`ws-auth`、`request-retry`、`max-retry-credentials`、`max-retry-interval`、`force-model-prefix`、`routing/strategy`、`claude-api-key`、`codex-api-key`、`xai-api-key`、`openai-compatibility`、`vertex-api-key`、`oauth-excluded-models`、`oauth-model-alias`、`oauth-request-scoped-errors`、`get-auth-status`、`plugins`。
+
+- **日志关闭。** launch 把 `logging-to-file` 设为 false。`GET /v0/management/logs` 期望 HTTP `400`，正文含 `logging to file disabled`。
+- **auth 文件模型。** `GET /v0/management/auth-files/models?name=verify-auth-upload.json`（先完成 management-api 上传）。HTTP `200`。
 
 - **写入再读。** PUT `/v0/management/debug` `{"value":true}`。GET 必须含 `"debug":true`。再 PUT `{"value":false}`。
 - **证明。** 保留 `config.yaml`、`debug`、`debug-after-put`。

@@ -18,7 +18,7 @@
 - `scripts/launch` 已构建 `VERIFY_BIN`。
 - 本条不走 HTTP。drive-all 直接跑二进制。
 
-- **帮助。** 执行 `"$VERIFY_BIN" --help`，保存到 `cli-help/help.txt`。退出码 0。正文含 `--config`、`--local-model`、`--tui`。
+- **帮助。** 执行 `"$VERIFY_BIN" --help`，保存到 `cli-help/help.txt`。退出码 0。正文含 Go flag 写法 `-config`、`-local-model`、`-tui`。
 - **证明。** 保留 `help.txt`。不要用 README 摘录代替。
 
 ## 注意事项

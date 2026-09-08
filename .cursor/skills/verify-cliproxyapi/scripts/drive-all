@@ -41,9 +41,9 @@ expect_ok root-identity "$HTTP" --save health-and-identity/root.txt GET /
 
 # cli-help
 if [[ -x "$VERIFY_BIN" ]] && "$VERIFY_BIN" --help >"$VERIFY_EVIDENCE_DIR/cli-help/help.txt" 2>&1; then
-  if grep -q -- '--config' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
-    grep -q -- '--local-model' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
-    grep -q -- '--tui' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt"; then
+  if grep -q -- '-config' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
+    grep -q -- '-local-model' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
+    grep -q -- '-tui' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt"; then
     pass cli-help
   else
     failx cli-help-flags
@@ -191,7 +191,6 @@ mgmt_reads=(
   usage-queue
   gemini-api-key
   interactions-api-key
-  logs
   request-error-logs
   request-log
   ws-auth
@@ -208,7 +207,6 @@ mgmt_reads=(
   oauth-excluded-models
   oauth-model-alias
   oauth-request-scoped-errors
-  auth-files/models
   get-auth-status
   plugins
 )
@@ -220,6 +218,11 @@ for rel in "${mgmt_reads[@]}"; do
   fi
 done
 if [[ "$settings_fail" -eq 0 ]]; then pass mgmt-settings-reads; else failx mgmt-settings-reads; fi
+expect_ok mgmt-logs-disabled "$HTTP" --allow-fail --mgmt --save management-settings/logs.txt GET /v0/management/logs
+grep -q 'HTTP 400' "$VERIFY_EVIDENCE_DIR/management-settings/logs.txt" || failx mgmt-logs-status
+grep -q 'logging to file disabled' "$VERIFY_EVIDENCE_DIR/management-settings/logs.txt" || failx mgmt-logs-body
+expect_ok mgmt-auth-file-models "$HTTP" --mgmt --save management-settings/auth-files-models.txt \
+  GET "/v0/management/auth-files/models?name=verify-auth-upload.json"
 grep -q 'verify-mock' "$VERIFY_EVIDENCE_DIR/management-settings/config.yaml.txt" || failx mgmt-config-yaml
 
 expect_ok mgmt-debug-put "$HTTP" --mgmt --save management-settings/debug-put.txt \

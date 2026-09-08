@@ -22,7 +22,7 @@ Preconditions:
 - No API key is required for these routes.
 
 - **Liveness GET.** Request health. Run `scripts/http --save health-and-identity/healthz.txt GET /healthz`. HTTP `200` and body contain `"status":"ok"`.
-- **Liveness HEAD.** Confirm HEAD works. Run `curl -sS -o /dev/null -w '%{http_code}\n' -I "$(. scripts/common.sh; verify_load_meta >/dev/null; verify_base_url)/healthz"` from the scripts directory after loading meta, or equivalent `curl -I` against `VERIFY_BASE_URL/healthz`. HTTP `200`.
+- **Liveness HEAD.** Confirm HEAD works. After `source scripts/common.sh && verify_load_meta`, run `curl -sS -o /dev/null -w '%{http_code}\n' -I "$VERIFY_BASE_URL/healthz"`. HTTP `200`.
 - **Root identity.** Request root. Run `scripts/http --save health-and-identity/root.txt GET /`. HTTP `200`, body contains `"message":"CLI Proxy API Server"` and endpoint string `GET /v1/models`.
 - **Proof.** Keep both saved response files under `evidence/health-and-identity/`. They must show status `ok` and the identity message.
 

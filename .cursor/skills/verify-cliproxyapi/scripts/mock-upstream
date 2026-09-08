@@ -6,12 +6,20 @@ set -euo pipefail
 HOST="${VERIFY_HOST:-127.0.0.1}"
 PORT="${VERIFY_MOCK_PORT:-18318}"
 MODEL="${VERIFY_UPSTREAM_MODEL:-mock-model}"
+LAST="${VERIFY_MOCK_LAST:-}"
 
-exec python3 - "$HOST" "$PORT" "$MODEL" <<'PY'
+exec python3 - "$HOST" "$PORT" "$MODEL" "$LAST" <<'PY'
 import json, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-host, port_s, model = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+host, port_s, model, last_path = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+
+def write_last(method, path, streamed):
+    if not last_path:
+        return
+    rec = {"method": method, "path": path, "stream": streamed}
+    with open(last_path, "w", encoding="utf-8") as f:
+        json.dump(rec, f)
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -29,8 +37,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _sse_chat(self):
+        payload = (
+            "data: {\"id\":\"chatcmpl-verify-mock\",\"object\":\"chat.completion.chunk\","
+            "\"model\":\"%s\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\","
+            "\"content\":\"pong-from-mock\"},\"finish_reason\":null}]}\n\n"
+            "data: {\"id\":\"chatcmpl-verify-mock\",\"object\":\"chat.completion.chunk\","
+            "\"model\":\"%s\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+            "data: [DONE]\n\n"
+        ) % (model, model)
+        body = payload.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        write_last("GET", path, False)
         if path in ("/healthz", "/"):
             self._json(200, {"status": "ok", "role": "verify-mock-upstream"})
             return
@@ -44,8 +70,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
-        _ = self._read()
+        raw = self._read()
+        streamed = False
+        try:
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, dict) and payload.get("stream") is True:
+            streamed = True
+        write_last("POST", path, streamed)
         if path.endswith("/chat/completions"):
+            if streamed:
+                self._sse_chat()
+                return
             self._json(200, {
                 "id": "chatcmpl-verify-mock",
                 "object": "chat.completion",
@@ -57,8 +94,38 @@ class Handler(BaseHTTPRequestHandler):
                 }],
             })
             return
+        if path.endswith("/completions"):
+            self._json(200, {
+                "id": "cmpl-verify-mock",
+                "object": "text_completion",
+                "model": model,
+                "choices": [{"index": 0, "text": "pong-from-mock", "finish_reason": "stop"}],
+            })
+            return
+        if path.endswith("/responses/compact"):
+            self._json(200, {
+                "id": "resp_verify_mock_compact",
+                "object": "response",
+                "model": model,
+                "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "pong-from-mock"}]}],
+            })
+            return
+        if path.endswith("/responses"):
+            self._json(200, {
+                "id": "resp_verify_mock",
+                "object": "response",
+                "status": "completed",
+                "model": model,
+                "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "pong-from-mock"}]}],
+            })
+            return
+        if path.endswith("/images/generations") or path.endswith("/images/edits"):
+            self._json(200, {
+                "created": 0,
+                "data": [{"b64_json": "cG9uZy1mcm9tLW1vY2s=", "revised_prompt": "pong-from-mock"}],
+            })
+            return
         if path.endswith("/messages"):
-            # 若被直接命中时的最小 Anthropic 形态响应。
             self._json(200, {
                 "id": "msg_verify_mock",
                 "type": "message",
@@ -70,6 +137,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": {"message": "not found", "path": path}})
 
-print(f"verify-mock-upstream 正在监听 http://{host}:{port_s}", flush=True)
+print("verify-mock-upstream 正在监听 http://%s:%s" % (host, port_s), flush=True)
 ThreadingHTTPServer((host, port_s), Handler).serve_forever()
 PY

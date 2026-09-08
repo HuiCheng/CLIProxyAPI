@@ -61,6 +61,7 @@ openai-compatibility:
     models:
       - name: "${VERIFY_UPSTREAM_MODEL}"
         alias: "${VERIFY_MODEL_ALIAS}"
+        image: true
 EOF
 
 echo "正在将 CLIProxyAPI 构建到 $VERIFY_BIN ..."
@@ -70,6 +71,7 @@ echo "正在将 CLIProxyAPI 构建到 $VERIFY_BIN ..."
 )
 
 echo "正在启动 mock 上游 ${VERIFY_HOST}:${VERIFY_MOCK_PORT} ..."
+VERIFY_MOCK_LAST="${VERIFY_RUN_DIR}/mock-last.json" \
 VERIFY_MOCK_PORT="$VERIFY_MOCK_PORT" VERIFY_HOST="$VERIFY_HOST" VERIFY_UPSTREAM_MODEL="$VERIFY_UPSTREAM_MODEL" \
   "$SCRIPTS_DIR/mock-upstream" >"$VERIFY_MOCK_LOG" 2>&1 &
 echo $! >"$VERIFY_MOCK_PID_FILE"

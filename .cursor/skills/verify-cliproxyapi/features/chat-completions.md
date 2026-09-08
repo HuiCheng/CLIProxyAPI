@@ -7,6 +7,7 @@
 - `chat-auth`：需要有效的客户端 API key。
 - `chat-unknown-model`：未列出的 model id 失败关闭。
 - `chat-success`：对 `VERIFY_MODEL_ALIAS` 返回助手消息。
+- `chat-stream`：`stream:true` 仍带出 `pong-from-mock`。
 - `chat-mock-boundary`：证明响应内容来自 mock 上游（`pong-from-mock`）。
 
 ## 如何到达（用户视角）
@@ -33,8 +34,9 @@
   HTTP `200`。响应体含 `"object":"chat.completion"`（或等价 OpenAI 聊天形态）以及助手内容 `pong-from-mock`。
 
 - **未知模型。** 将 `"model"` 换成 `"definitely-missing-model"` 再试。期望代理返回非 2xx（若 `scripts/http` 在保存前非零退出，可用仍会写 body 的包装或原始 curl，保存为 `chat-completions/unknown-model.txt`）。可观察结果：错误响应，而不是 `pong-from-mock`。
+- **流式。** 同一路径加 `"stream":true`，保存 `chat-completions/stream.txt`。正文含 `pong-from-mock`。
 - **缺少鉴权。** 不加 `--api` 发送相同 body。期望 HTTP `401`。
-- **证明。** 保留 `success.txt`。确认其中同时出现请求路径 `/v1/chat/completions` 与内容 `pong-from-mock`。该字符串只定义在 `scripts/mock-upstream`，从而证明经过了 openai-compatibility 跃点。
+- **证明。** 保留 `success.txt` 与 `stream.txt`。确认路径 `/v1/chat/completions` 与 `pong-from-mock`。该字符串只定义在 `scripts/mock-upstream`。
 
 ## 注意事项
 

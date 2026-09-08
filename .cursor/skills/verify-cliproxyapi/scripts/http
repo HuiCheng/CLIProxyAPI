@@ -18,11 +18,13 @@ save_path=""
 json_body=""
 method=""
 path=""
+allow_fail=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --api) auth_mode="api"; shift ;;
     --mgmt) auth_mode="mgmt"; shift ;;
+    --allow-fail) allow_fail=1; shift ;;
     --save) save_path="$2"; shift 2 ;;
     --json) json_body="$2"; shift 2 ;;
     GET|POST|PUT|PATCH|DELETE|HEAD) method="$1"; shift; path="$1"; shift ;;
@@ -34,7 +36,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$method" || -z "$path" ]]; then
-  echo "用法: scripts/http [--api|--mgmt] [--save PATH] [--json BODY] METHOD /path" >&2
+  echo "用法: scripts/http [--api|--mgmt] [--allow-fail] [--save PATH] [--json BODY] METHOD /path" >&2
   exit 2
 fi
 
@@ -76,5 +78,10 @@ printf '%s\n' "$body"
 # 非 2xx 以非零退出，便于功能配方失败即停。
 case "$code" in
   2??) exit 0 ;;
-  *) exit 1 ;;
+  *)
+    if [[ "$allow_fail" -eq 1 ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
 esac

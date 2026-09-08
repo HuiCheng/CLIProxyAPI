@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Authenticated HTTP helper against the active verification instance.
+# Usage:
+#   scripts/http GET /healthz
+#   scripts/http --api GET /v1/models
+#   scripts/http --mgmt GET /v0/management/api-keys
+#   scripts/http --api POST /v1/chat/completions --json '{"model":"verify-mock","messages":[{"role":"user","content":"ping"}]}'
+#   scripts/http --api --save evidence/chat/response.json POST /v1/chat/completions --json '...'
+set -euo pipefail
+
+. "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
+verify_require_cmd curl
+verify_load_meta
+
+auth_mode="none"
+save_path=""
+json_body=""
+method=""
+path=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --api) auth_mode="api"; shift ;;
+    --mgmt) auth_mode="mgmt"; shift ;;
+    --save) save_path="$2"; shift 2 ;;
+    --json) json_body="$2"; shift 2 ;;
+    GET|POST|PUT|PATCH|DELETE|HEAD) method="$1"; shift; path="$1"; shift ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$method" || -z "$path" ]]; then
+  echo "Usage: scripts/http [--api|--mgmt] [--save PATH] [--json BODY] METHOD /path" >&2
+  exit 2
+fi
+
+base="$(verify_base_url)"
+url="${base}${path}"
+
+args=(-sS -D /tmp/cliproxyapi-http-headers.txt -o /tmp/cliproxyapi-http-body.bin -w '%{http_code}' -X "$method")
+case "$auth_mode" in
+  api) args+=(-H "Authorization: Bearer ${VERIFY_API_KEY}") ;;
+  mgmt) args+=(-H "Authorization: Bearer ${VERIFY_MGMT_KEY}") ;;
+esac
+if [[ -n "$json_body" ]]; then
+  args+=(-H "Content-Type: application/json" --data "$json_body")
+fi
+
+code="$(curl "${args[@]}" "$url")"
+body="$(cat /tmp/cliproxyapi-http-body.bin)"
+
+if [[ -n "$save_path" ]]; then
+  if [[ "$save_path" != /* ]]; then
+    save_path="${VERIFY_EVIDENCE_DIR}/${save_path}"
+  fi
+  mkdir -p "$(dirname "$save_path")"
+  {
+    echo "HTTP ${code}"
+    echo "METHOD ${method}"
+    echo "URL ${url}"
+    echo "AUTH ${auth_mode}"
+    echo "---- response headers ----"
+    cat /tmp/cliproxyapi-http-headers.txt
+    echo "---- response body ----"
+    printf '%s\n' "$body"
+  } >"$save_path"
+fi
+
+printf 'HTTP %s\n' "$code"
+printf '%s\n' "$body"
+
+# Non-2xx exits non-zero so feature recipes can fail closed.
+case "$code" in
+  2??) exit 0 ;;
+  *) exit 1 ;;
+esac

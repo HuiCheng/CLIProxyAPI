@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Tear down the verification instance started by scripts/launch.
+# Preserves evidence under VERIFY_EVIDENCE_DIR.
+set -euo pipefail
+
+. "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
+if ! verify_load_meta 2>/dev/null; then
+  # Best-effort cleanup of stale active-run pointer.
+  if [[ -f "$ACTIVE_RUN_FILE" ]]; then
+    run_id="$(tr -d '[:space:]' <"$ACTIVE_RUN_FILE" || true)"
+    if [[ -n "$run_id" ]]; then
+      verify_paths_for_run "$run_id"
+    fi
+  else
+    echo "Nothing to clean up (no active run)."
+    exit 0
+  fi
+fi
+
+kill_pid_file() {
+  local file="$1"
+  local label="$2"
+  if [[ ! -f "$file" ]]; then
+    echo "No $label pid file"
+    return 0
+  fi
+  local pid
+  pid="$(tr -d '[:space:]' <"$file")"
+  if [[ -z "$pid" ]]; then
+    echo "Empty $label pid file"
+    rm -f "$file"
+    return 0
+  fi
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "Stopping $label pid $pid"
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      if ! kill -0 "$pid" 2>/dev/null; then
+        break
+      fi
+      sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "Force-killing $label pid $pid"
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  else
+    echo "$label pid $pid already stopped"
+  fi
+  rm -f "$file"
+}
+
+kill_pid_file "${VERIFY_PID_FILE:-}" "server"
+kill_pid_file "${VERIFY_MOCK_PID_FILE:-}" "mock-upstream"
+
+# Remove only the run/instance directory. Keep evidence.
+if [[ -n "${VERIFY_RUN_DIR:-}" && -d "${VERIFY_RUN_DIR}" ]]; then
+  rm -rf "$VERIFY_RUN_DIR"
+  echo "Removed instance dir $VERIFY_RUN_DIR"
+fi
+
+if [[ -f "$ACTIVE_RUN_FILE" ]]; then
+  active="$(tr -d '[:space:]' <"$ACTIVE_RUN_FILE" || true)"
+  if [[ -z "${VERIFY_RUN_ID:-}" || "$active" == "$VERIFY_RUN_ID" ]]; then
+    rm -f "$ACTIVE_RUN_FILE"
+  fi
+fi
+
+echo "Cleanup complete."
+echo "Evidence preserved at: ${VERIFY_EVIDENCE_DIR:-unknown}"
+if [[ -n "${VERIFY_EVIDENCE_DIR:-}" && -d "${VERIFY_EVIDENCE_DIR}" ]]; then
+  find "$VERIFY_EVIDENCE_DIR" -type f | sort || true
+fi

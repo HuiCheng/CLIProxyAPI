@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Launch an isolated CLIProxyAPI verification instance + local OpenAI-compat mock upstream.
+set -euo pipefail
+
+. "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
+verify_require_cmd go curl python3
+
+if [[ -f "$ACTIVE_RUN_FILE" ]]; then
+  existing="$(tr -d '[:space:]' <"$ACTIVE_RUN_FILE" || true)"
+  if [[ -n "$existing" ]]; then
+    verify_paths_for_run "$existing"
+    if [[ -f "$VERIFY_PID_FILE" ]] && kill -0 "$(cat "$VERIFY_PID_FILE")" 2>/dev/null; then
+      echo "Refusing to launch: active verification run $existing is still up." >&2
+      echo "Run scripts/cleanup first, or export a new VERIFY_RUN_ID after cleanup." >&2
+      exit 1
+    fi
+  fi
+fi
+
+VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(verify_new_run_id)}"
+verify_paths_for_run "$VERIFY_RUN_ID"
+
+mkdir -p "$VERIFY_RUN_DIR" "$VERIFY_AUTH_DIR" "$VERIFY_EVIDENCE_DIR"
+
+VERIFY_HOST="${VERIFY_HOST:-$DEFAULT_HOST}"
+VERIFY_PORT="${VERIFY_PORT:-$(verify_pick_free_port "$DEFAULT_PORT_BASE")}"
+VERIFY_MOCK_PORT="${VERIFY_MOCK_PORT:-$(verify_pick_free_port "$((VERIFY_PORT + 1))")}"
+VERIFY_API_KEY="${VERIFY_API_KEY:-verify-api-key-${VERIFY_RUN_ID}}"
+VERIFY_MGMT_KEY="${VERIFY_MGMT_KEY:-verify-mgmt-key-${VERIFY_RUN_ID}}"
+VERIFY_MOCK_KEY="${VERIFY_MOCK_KEY:-verify-mock-upstream-key}"
+VERIFY_MODEL_ALIAS="${VERIFY_MODEL_ALIAS:-verify-mock}"
+VERIFY_UPSTREAM_MODEL="${VERIFY_UPSTREAM_MODEL:-mock-model}"
+
+# Never use template keys from config.example.yaml — they trigger example-api-key safe mode.
+case "$VERIFY_API_KEY" in
+  your-api-key-1|your-api-key-2|your-api-key-3)
+    echo "VERIFY_API_KEY must not be an example template value" >&2
+    exit 1
+    ;;
+esac
+
+cat >"$VERIFY_CONFIG" <<EOF
+# Verification scaffolding only — created by verify-cliproxyapi launch; removed by cleanup.
+host: "${VERIFY_HOST}"
+port: ${VERIFY_PORT}
+auth-dir: "${VERIFY_AUTH_DIR}"
+api-keys:
+  - "${VERIFY_API_KEY}"
+remote-management:
+  allow-remote: false
+  secret-key: "${VERIFY_MGMT_KEY}"
+  disable-control-panel: true
+debug: false
+logging-to-file: false
+openai-compatibility:
+  - name: "verify-mock"
+    base-url: "http://${VERIFY_HOST}:${VERIFY_MOCK_PORT}/v1"
+    api-key-entries:
+      - api-key: "${VERIFY_MOCK_KEY}"
+    models:
+      - name: "${VERIFY_UPSTREAM_MODEL}"
+        alias: "${VERIFY_MODEL_ALIAS}"
+EOF
+
+echo "Building CLIProxyAPI binary into $VERIFY_BIN ..."
+(
+  cd "$REPO_ROOT"
+  go build -o "$VERIFY_BIN" ./cmd/server
+)
+
+echo "Starting mock upstream on ${VERIFY_HOST}:${VERIFY_MOCK_PORT} ..."
+VERIFY_MOCK_PORT="$VERIFY_MOCK_PORT" VERIFY_HOST="$VERIFY_HOST" VERIFY_UPSTREAM_MODEL="$VERIFY_UPSTREAM_MODEL" \
+  "$SCRIPTS_DIR/mock-upstream" >"$VERIFY_MOCK_LOG" 2>&1 &
+echo $! >"$VERIFY_MOCK_PID_FILE"
+
+verify_wait_http_ok "http://${VERIFY_HOST}:${VERIFY_MOCK_PORT}/healthz" 40
+
+echo "Starting CLIProxyAPI on ${VERIFY_HOST}:${VERIFY_PORT} ..."
+"$VERIFY_BIN" --config "$VERIFY_CONFIG" --local-model >"$VERIFY_LOG" 2>&1 &
+echo $! >"$VERIFY_PID_FILE"
+
+verify_wait_http_ok "http://${VERIFY_HOST}:${VERIFY_PORT}/healthz" 60
+
+if ! grep -q "API server started successfully on: ${VERIFY_HOST}:${VERIFY_PORT}" "$VERIFY_LOG"; then
+  echo "Server log missing ready line; dumping log:" >&2
+  tail -n 80 "$VERIFY_LOG" >&2 || true
+  exit 1
+fi
+
+cat >"$VERIFY_META" <<EOF
+VERIFY_RUN_ID=${VERIFY_RUN_ID}
+VERIFY_HOST=${VERIFY_HOST}
+VERIFY_PORT=${VERIFY_PORT}
+VERIFY_MOCK_PORT=${VERIFY_MOCK_PORT}
+VERIFY_API_KEY=${VERIFY_API_KEY}
+VERIFY_MGMT_KEY=${VERIFY_MGMT_KEY}
+VERIFY_MOCK_KEY=${VERIFY_MOCK_KEY}
+VERIFY_MODEL_ALIAS=${VERIFY_MODEL_ALIAS}
+VERIFY_UPSTREAM_MODEL=${VERIFY_UPSTREAM_MODEL}
+VERIFY_BASE_URL=http://${VERIFY_HOST}:${VERIFY_PORT}
+VERIFY_ROOT=${VERIFY_ROOT}
+VERIFY_RUN_DIR=${VERIFY_RUN_DIR}
+VERIFY_EVIDENCE_DIR=${VERIFY_EVIDENCE_DIR}
+VERIFY_CONFIG=${VERIFY_CONFIG}
+VERIFY_AUTH_DIR=${VERIFY_AUTH_DIR}
+VERIFY_LOG=${VERIFY_LOG}
+VERIFY_BIN=${VERIFY_BIN}
+EOF
+
+printf '%s\n' "$VERIFY_RUN_ID" >"$ACTIVE_RUN_FILE"
+
+cat <<EOF
+Launched verification instance
+  RUN_ID:        ${VERIFY_RUN_ID}
+  BASE_URL:      http://${VERIFY_HOST}:${VERIFY_PORT}
+  MOCK_URL:      http://${VERIFY_HOST}:${VERIFY_MOCK_PORT}
+  API_KEY:       ${VERIFY_API_KEY}
+  MGMT_KEY:      ${VERIFY_MGMT_KEY}
+  MODEL_ALIAS:   ${VERIFY_MODEL_ALIAS}
+  RUN_DIR:       ${VERIFY_RUN_DIR}
+  EVIDENCE_DIR:  ${VERIFY_EVIDENCE_DIR}
+  LOG:           ${VERIFY_LOG}
+Next: scripts/doctor
+EOF

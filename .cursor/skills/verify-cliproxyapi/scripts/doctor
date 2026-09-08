@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Read-only health check for the active verification instance.
+set -euo pipefail
+
+. "$(cd "$(dirname "$0")" && pwd)/common.sh"
+
+verify_require_cmd curl
+verify_load_meta
+
+fail=0
+say() { printf '%s\n' "$*"; }
+ok() { say "OK  $*"; }
+bad() { say "BAD $*"; fail=1; }
+
+if [[ ! -f "$VERIFY_PID_FILE" ]]; then
+  bad "missing server pid file $VERIFY_PID_FILE"
+else
+  pid="$(cat "$VERIFY_PID_FILE")"
+  if kill -0 "$pid" 2>/dev/null; then
+    ok "server pid $pid is alive"
+  else
+    bad "server pid $pid is not running"
+  fi
+fi
+
+if [[ ! -f "$VERIFY_MOCK_PID_FILE" ]]; then
+  bad "missing mock pid file $VERIFY_MOCK_PID_FILE"
+else
+  mpid="$(cat "$VERIFY_MOCK_PID_FILE")"
+  if kill -0 "$mpid" 2>/dev/null; then
+    ok "mock upstream pid $mpid is alive"
+  else
+    bad "mock upstream pid $mpid is not running"
+  fi
+fi
+
+base="$(verify_base_url)"
+hz="$(curl -sS -o /tmp/cliproxyapi-doctor-healthz.json -w '%{http_code}' "$base/healthz" || true)"
+if [[ "$hz" == "200" ]] && grep -q '"status":"ok"' /tmp/cliproxyapi-doctor-healthz.json; then
+  ok "GET /healthz -> 200 {\"status\":\"ok\"}"
+else
+  bad "GET /healthz failed (code=$hz body=$(cat /tmp/cliproxyapi-doctor-healthz.json 2>/dev/null || true))"
+fi
+
+root="$(curl -sS -o /tmp/cliproxyapi-doctor-root.json -w '%{http_code}' "$base/" || true)"
+if [[ "$root" == "200" ]] && grep -q 'CLI Proxy API Server' /tmp/cliproxyapi-doctor-root.json; then
+  ok "GET / -> 200 identity message present"
+else
+  bad "GET / identity check failed (code=$root)"
+fi
+
+owner_ok=0
+if command -v ss >/dev/null 2>&1; then
+  if ss -ltnp 2>/dev/null | grep -E ":${VERIFY_PORT}\\b" | grep -q "pid=$(cat "$VERIFY_PID_FILE")"; then
+    owner_ok=1
+  fi
+fi
+if [[ "$owner_ok" -eq 1 ]]; then
+  ok "port ${VERIFY_PORT} owned by verification server pid"
+else
+  # Fall back to connectivity + pid check already done above.
+  ok "port ${VERIFY_PORT} answers on verification BASE_URL (ss ownership check skipped or inconclusive)"
+fi
+
+models_code="$(curl -sS -o /tmp/cliproxyapi-doctor-models.json -w '%{http_code}' \
+  -H "Authorization: Bearer ${VERIFY_API_KEY}" "$base/v1/models" || true)"
+if [[ "$models_code" == "200" ]] && grep -q "\"id\":\"${VERIFY_MODEL_ALIAS}\"" /tmp/cliproxyapi-doctor-models.json; then
+  ok "GET /v1/models with verification API key lists ${VERIFY_MODEL_ALIAS}"
+else
+  bad "GET /v1/models unexpected (code=$models_code body=$(cat /tmp/cliproxyapi-doctor-models.json 2>/dev/null || true))"
+fi
+
+mgmt_code="$(curl -sS -o /tmp/cliproxyapi-doctor-mgmt.json -w '%{http_code}' \
+  -H "Authorization: Bearer ${VERIFY_MGMT_KEY}" "$base/v0/management/api-keys" || true)"
+if [[ "$mgmt_code" == "200" ]] && grep -q "${VERIFY_API_KEY}" /tmp/cliproxyapi-doctor-mgmt.json; then
+  ok "GET /v0/management/api-keys with management key succeeds"
+else
+  bad "management api-keys check failed (code=$mgmt_code)"
+fi
+
+say "---"
+say "RUN_ID=${VERIFY_RUN_ID}"
+say "BASE_URL=${base}"
+say "EVIDENCE_DIR=${VERIFY_EVIDENCE_DIR}"
+say "LOG=${VERIFY_LOG}"
+
+if [[ "$fail" -ne 0 ]]; then
+  say "doctor: FAIL — do not drive this instance"
+  exit 1
+fi
+say "doctor: PASS — instance is worth driving"
+exit 0

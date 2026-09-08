@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Tiny OpenAI-compatible mock upstream for verification scaffolding.
+# Listens on VERIFY_HOST:VERIFY_MOCK_PORT (defaults 127.0.0.1:18318).
+set -euo pipefail
+
+HOST="${VERIFY_HOST:-127.0.0.1}"
+PORT="${VERIFY_MOCK_PORT:-18318}"
+MODEL="${VERIFY_UPSTREAM_MODEL:-mock-model}"
+
+exec python3 - "$HOST" "$PORT" "$MODEL" <<'PY'
+import json, sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+host, port_s, model = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+
+    def _read(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n) if n else b""
+
+    def _json(self, code, obj):
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path in ("/healthz", "/"):
+            self._json(200, {"status": "ok", "role": "verify-mock-upstream"})
+            return
+        if path.endswith("/models"):
+            self._json(200, {
+                "object": "list",
+                "data": [{"id": model, "object": "model", "owned_by": "verify-mock"}],
+            })
+            return
+        self._json(404, {"error": {"message": "not found", "path": path}})
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        _ = self._read()
+        if path.endswith("/chat/completions"):
+            self._json(200, {
+                "id": "chatcmpl-verify-mock",
+                "object": "chat.completion",
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "pong-from-mock"},
+                    "finish_reason": "stop",
+                }],
+            })
+            return
+        if path.endswith("/messages"):
+            # Minimal Anthropic-shaped response if ever hit directly.
+            self._json(200, {
+                "id": "msg_verify_mock",
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "text", "text": "pong-from-mock"}],
+                "model": model,
+                "stop_reason": "end_turn",
+            })
+            return
+        self._json(404, {"error": {"message": "not found", "path": path}})
+
+print(f"verify-mock-upstream listening on http://{host}:{port_s}", flush=True)
+ThreadingHTTPServer((host, port_s), Handler).serve_forever()
+PY

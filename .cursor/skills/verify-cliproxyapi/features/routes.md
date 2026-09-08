@@ -84,9 +84,13 @@
 | `--tui` / `--standalone` | 需要专用 PTY，且会占用端口 |
 | `GET /v1/responses` WebSocket | `scripts/http` 不够 |
 | `GET /backend-api/codex/responses` WebSocket | 同上 |
+| `GET /v1/ws` | AI Studio / wsrelay，需要 WS 客户端 |
 | `POST /v1/live`、`GET /v1/live/:id`、全部 `/v1/realtime*` | 需要 Codex/Live 凭据与 WS |
+| `GET /v0/resource/plugins/…` | 需要已加载插件资源 |
 | `GET /v0/management/latest-version` | 打 GitHub |
 | `GET /v0/management/plugin-store` 与 install | 打网络仓库 |
 | `GET /v0/management/*-auth-url` | 启动真实 OAuth |
+| `GET|POST /v0/management/oauth-callback` | 完成进行中的 OAuth，无管理密钥 |
 | `POST /v0/management/api-call` | 向任意上游发请求 |
 | `POST /v0/management/vertex/import` | 导入真实密钥文件 |
+| 已删除的 Amp `/api/*` | 本分支无代码，404 不计入覆盖 |

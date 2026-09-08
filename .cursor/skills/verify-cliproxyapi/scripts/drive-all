@@ -285,12 +285,16 @@ skipped:
   - realtime-live (需要 WS 与 Codex/Live 凭据)
   - GET /v1/responses WebSocket
   - GET /backend-api/codex/responses WebSocket
+  - GET /v1/ws (AI Studio / wsrelay)
+  - GET /v0/resource/plugins/... (需要已加载插件)
   - plugins-store / plugin-store install (会访问网络仓库)
   - GET /v0/management/latest-version (打 GitHub)
   - GET /v0/management/*-auth-url (启动真实 OAuth)
+  - GET|POST /v0/management/oauth-callback (完成进行中的 OAuth)
   - POST /v0/management/api-call (向任意上游发请求)
   - POST /v0/management/vertex/import (导入真实密钥)
   - --vertex-import / --home-jwt
+  - Amp /api/* (本分支已删除)
 RUN_ID: ${VERIFY_RUN_ID}
 EOF
 cat > "$VERIFY_EVIDENCE_DIR/NOTES.txt" <<EOF

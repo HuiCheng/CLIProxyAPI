@@ -8,22 +8,28 @@
 
 - `oauth-login` CLI 登录旗标。
 - `tui` 终端管理 UI。
-- `realtime-live` Realtime / Live / WebSocket。
+- `realtime-live` Realtime / Live / WebSocket（含 `/v1/ws`）。
 - `plugins-store` 插件商店与安装。
+- `plugin-resources` 已加载插件的静态资源路径。
 - `mgmt-latest-version` 管理端拉 GitHub 最新版本。
 - `mgmt-oauth-url` 管理端发起真实 OAuth URL。
+- `mgmt-oauth-callback` 管理端 OAuth 回调（无管理密钥，只完成进行中的登录）。
 - `mgmt-api-call` 管理端向任意上游发请求。
 - `vertex-import` 导入服务账号密钥。
+
+Amp（`/api/*` 等）已从本分支删除。不要再登记为可驱动入口。
 
 ## 如何到达（用户视角）
 
 - `cli-proxy-api --claude-login` / `--codex-login` / `--codex-device-login` / `--antigravity-login` / `--kimi-login` / `--xai-login`，可选 `--no-browser`、`--oauth-callback-port`。
 - `cli-proxy-api --vertex-import <file>`。
 - `cli-proxy-api --tui` 或 `--tui --standalone`。
-- `GET /v1/responses` WebSocket、`GET /backend-api/codex/responses` WebSocket、`GET /v1/realtime`、`POST /v1/live`。
+- `GET /v1/responses` WebSocket、`GET /backend-api/codex/responses` WebSocket、`GET /v1/realtime`、`POST /v1/live`、`GET /v1/ws`。
+- `GET /v0/resource/plugins/<pluginID>/…`（需已加载插件资源）。
 - `GET /v0/management/plugin-store`、`POST /v0/management/plugin-store/:id/install`。
 - `GET /v0/management/latest-version`。
 - `GET /v0/management/anthropic-auth-url` 等 `*-auth-url`。
+- `GET|POST /v0/management/oauth-callback`。
 - `POST /v0/management/api-call`。
 - `POST /v0/management/vertex/import`。
 
@@ -35,9 +41,10 @@
 
 - **OAuth 登录。** 需要真实提供方账号与回调。不要在验证机上对公网发起登录。尝试命令示例：`VERIFY_BIN --config $VERIFY_CONFIG --no-browser --claude-login`。未满足「真实账号」则跳过。
 - **TUI。** 需要独立 PTY/tmux，且不要复用验证 HTTP 实例的端口。未满足「专用 PTY」则跳过。
-- **Realtime / Live / WS。** 需要 Codex/Live 凭据与 WebSocket 客户端。`scripts/http` 不够。未满足则跳过。
+- **Realtime / Live / WS。** 需要 Codex/Live 凭据与 WebSocket 客户端。`scripts/http` 不够。未满足则跳过。含 `/v1/ws`。
 - **插件商店。** `GET /v0/management/plugin-store` 与 install 会访问网络仓库。隔离运行默认不装插件。
-- **latest-version / *-auth-url / api-call / vertex/import。** 会打公网、打开 OAuth，或写入真实密钥。隔离验证禁止当成功路径执行。
+- **插件资源。** `/v0/resource/plugins/…` 依赖已加载插件。默认启动没有可证明的资源。
+- **latest-version / *-auth-url / oauth-callback / api-call / vertex/import。** 会打公网、打开或完成 OAuth，或写入真实密钥。隔离验证禁止当成功路径执行。
 - **证明。** 跳过条目写入 `evidence/blocked-surfaces/notes.txt`，列出入口与未满足前置。
 
 ## 注意事项

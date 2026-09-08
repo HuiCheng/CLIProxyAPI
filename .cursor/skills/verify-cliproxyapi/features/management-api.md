@@ -39,4 +39,5 @@
 
 - 未配置 secret 时整组路由 404。
 - PUT api-keys 会改客户端鉴权。必须恢复原 key，否则后续 `--api` 失败。
-- `*-auth-url`、`plugin-store`、`latest-version` 不在本文件。见 blocked-surfaces。
+- 本地布尔/列表读取见 [management-settings](./management-settings.md)。
+- `*-auth-url`、`plugin-store`、`latest-version`、`api-call` 不在本文件。见 blocked-surfaces。

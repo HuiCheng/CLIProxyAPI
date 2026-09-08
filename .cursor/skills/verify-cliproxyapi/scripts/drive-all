@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 驱动功能地图中全部可隔离验证的用户路径，并把证据写入 VERIFY_EVIDENCE_DIR。
+# 按 features/routes.md 驱动全部可隔离用户路径，证据写入 VERIFY_EVIDENCE_DIR。
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/common.sh"
@@ -23,14 +23,34 @@ expect_ok() {
   fi
 }
 
+not_mock_success() {
+  local file="$1"
+  if grep -q 'HTTP 200' "$file" && grep -q 'pong-from-mock' "$file"; then
+    return 1
+  fi
+  return 0
+}
 
-mkdir -p "$VERIFY_EVIDENCE_DIR"/{health-and-identity,client-auth-and-models,chat-completions,claude-messages,gemini-generate,openai-responses,openai-completions,images-generations,management-api,oauth-callbacks}
+mkdir -p "$VERIFY_EVIDENCE_DIR"/{health-and-identity,client-auth-and-models,chat-completions,claude-messages,gemini-generate,gemini-interactions,openai-responses,responses-compact,openai-completions,images-generations,images-edits,management-api,management-settings,oauth-callbacks,cli-help,isolated-errors,blocked-surfaces}
 
 # health-and-identity
 expect_ok healthz-get "$HTTP" --save health-and-identity/healthz.txt GET /healthz
 head_code="$(curl -sS -o /dev/null -w '%{http_code}' -I "$VERIFY_BASE_URL/healthz" || true)"
 if [[ "$head_code" == "200" ]]; then pass healthz-head; else failx healthz-head; fi
 expect_ok root-identity "$HTTP" --save health-and-identity/root.txt GET /
+
+# cli-help
+if [[ -x "$VERIFY_BIN" ]] && "$VERIFY_BIN" --help >"$VERIFY_EVIDENCE_DIR/cli-help/help.txt" 2>&1; then
+  if grep -q -- '--config' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
+    grep -q -- '--local-model' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt" &&
+    grep -q -- '--tui' "$VERIFY_EVIDENCE_DIR/cli-help/help.txt"; then
+    pass cli-help
+  else
+    failx cli-help-flags
+  fi
+else
+  failx cli-help
+fi
 
 # client-auth-and-models
 expect_ok auth-missing "$HTTP" --allow-fail --save client-auth-and-models/missing.txt GET /v1/models
@@ -53,8 +73,6 @@ expect_ok chat-auth "$HTTP" --allow-fail --save chat-completions/missing-auth.tx
   POST /v1/chat/completions \
   --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}"
 grep -q 'HTTP 401' "$VERIFY_EVIDENCE_DIR/chat-completions/missing-auth.txt" || failx chat-auth-status
-
-# chat-streaming
 expect_ok chat-stream "$HTTP" --api --save chat-completions/stream.txt \
   POST /v1/chat/completions \
   --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"stream\":true,\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}"
@@ -71,9 +89,26 @@ expect_ok claude-count-tokens "$HTTP" --allow-fail --api --save claude-messages/
 
 # gemini-generate
 expect_ok gemini-models "$HTTP" --api --save gemini-generate/models.txt GET /v1beta/models
+expect_ok gemini-get-model "$HTTP" --api --save gemini-generate/get-model.txt GET "/v1beta/models/${VERIFY_MODEL_ALIAS}"
 expect_ok gemini-generate "$HTTP" --api --save gemini-generate/generate.txt \
   POST "/v1beta/models/${VERIFY_MODEL_ALIAS}:generateContent" \
   --json '{"contents":[{"parts":[{"text":"ping"}]}]}'
+expect_ok gemini-stream "$HTTP" --api --save gemini-generate/stream.txt \
+  POST "/v1beta/models/${VERIFY_MODEL_ALIAS}:streamGenerateContent" \
+  --json '{"contents":[{"parts":[{"text":"ping"}]}]}'
+expect_ok gemini-count-tokens "$HTTP" --allow-fail --api --save gemini-generate/count-tokens.txt \
+  POST "/v1beta/models/${VERIFY_MODEL_ALIAS}:countTokens" \
+  --json '{"contents":[{"parts":[{"text":"ping"}]}]}'
+
+# gemini-interactions
+expect_ok gemini-interactions "$HTTP" --api --save gemini-interactions/success.txt \
+  POST /v1beta/interactions \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
+grep -q 'pong-from-mock' "$VERIFY_EVIDENCE_DIR/gemini-interactions/success.txt" || failx gemini-interactions-mock
+expect_ok gemini-interactions-auth "$HTTP" --allow-fail --save gemini-interactions/missing-auth.txt \
+  POST /v1beta/interactions \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
+grep -q 'HTTP 401' "$VERIFY_EVIDENCE_DIR/gemini-interactions/missing-auth.txt" || failx gemini-interactions-auth-status
 
 # openai-responses
 expect_ok responses "$HTTP" --api --save openai-responses/success.txt \
@@ -83,15 +118,34 @@ expect_ok responses-codex-alias "$HTTP" --api --save openai-responses/codex-alia
   POST /backend-api/codex/responses \
   --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
 
+# responses-compact
+expect_ok responses-compact "$HTTP" --api --save responses-compact/success.txt \
+  POST /v1/responses/compact \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
+expect_ok responses-compact-codex "$HTTP" --api --save responses-compact/codex-alias.txt \
+  POST /backend-api/codex/responses/compact \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
+expect_ok responses-compact-auth "$HTTP" --allow-fail --save responses-compact/missing-auth.txt \
+  POST /v1/responses/compact \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"input\":\"ping\"}"
+grep -q 'HTTP 401' "$VERIFY_EVIDENCE_DIR/responses-compact/missing-auth.txt" || failx responses-compact-auth-status
+
 # openai-completions
 expect_ok completions "$HTTP" --api --save openai-completions/success.txt \
   POST /v1/completions \
   --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"ping\"}"
 
-# images-generations
+# images
 expect_ok images "$HTTP" --api --save images-generations/success.txt \
   POST /v1/images/generations \
   --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a dot\"}"
+expect_ok images-edits "$HTTP" --api --save images-edits/success.txt \
+  POST /v1/images/edits \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a dot\",\"image\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}"
+expect_ok images-edits-auth "$HTTP" --allow-fail --save images-edits/missing-auth.txt \
+  POST /v1/images/edits \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a dot\",\"image\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}"
+grep -q 'HTTP 401' "$VERIFY_EVIDENCE_DIR/images-edits/missing-auth.txt" || failx images-edits-auth-status
 
 # management-api
 expect_ok mgmt-missing "$HTTP" --allow-fail --save management-api/missing.txt GET /v0/management/api-keys
@@ -122,32 +176,127 @@ curl -sS -D "$VERIFY_EVIDENCE_DIR/management-api/auth-upload.headers.txt" \
   "$VERIFY_BASE_URL/v0/management/auth-files" > "$VERIFY_EVIDENCE_DIR/management-api/auth-upload.status.txt" || true
 expect_ok mgmt-auth-list "$HTTP" --mgmt --save management-api/auth-files.txt GET /v0/management/auth-files
 
+# management-settings
+mgmt_reads=(
+  config.yaml
+  debug
+  logging-to-file
+  logs-max-total-size-mb
+  error-logs-max-files
+  usage-statistics-enabled
+  proxy-url
+  quota-exceeded/switch-project
+  quota-exceeded/switch-preview-model
+  api-key-usage
+  usage-queue
+  gemini-api-key
+  interactions-api-key
+  logs
+  request-error-logs
+  request-log
+  ws-auth
+  request-retry
+  max-retry-credentials
+  max-retry-interval
+  force-model-prefix
+  routing/strategy
+  claude-api-key
+  codex-api-key
+  xai-api-key
+  openai-compatibility
+  vertex-api-key
+  oauth-excluded-models
+  oauth-model-alias
+  oauth-request-scoped-errors
+  auth-files/models
+  get-auth-status
+  plugins
+)
+settings_fail=0
+for rel in "${mgmt_reads[@]}"; do
+  save="management-settings/${rel//\//-}.txt"
+  if ! "$HTTP" --mgmt --save "$save" GET "/v0/management/${rel}"; then
+    settings_fail=1
+  fi
+done
+if [[ "$settings_fail" -eq 0 ]]; then pass mgmt-settings-reads; else failx mgmt-settings-reads; fi
+grep -q 'verify-mock' "$VERIFY_EVIDENCE_DIR/management-settings/config.yaml.txt" || failx mgmt-config-yaml
+
+expect_ok mgmt-debug-put "$HTTP" --mgmt --save management-settings/debug-put.txt \
+  PUT /v0/management/debug \
+  --json '{"value":true}'
+expect_ok mgmt-debug-after-put "$HTTP" --mgmt --save management-settings/debug-after-put.txt GET /v0/management/debug
+grep -q '"debug":true' "$VERIFY_EVIDENCE_DIR/management-settings/debug-after-put.txt" || failx mgmt-debug-persisted
+expect_ok mgmt-debug-restore "$HTTP" --mgmt --save management-settings/debug-restore.txt \
+  PUT /v0/management/debug \
+  --json '{"value":false}'
+
 # oauth-callbacks
 expect_ok oauth-anthropic "$HTTP" --save oauth-callbacks/anthropic.txt GET /anthropic/callback
 grep -q 'Authentication successful' "$VERIFY_EVIDENCE_DIR/oauth-callbacks/anthropic.txt" || failx oauth-anthropic-html
 expect_ok oauth-codex "$HTTP" --save oauth-callbacks/codex.txt GET /codex/callback
 expect_ok oauth-antigravity "$HTTP" --save oauth-callbacks/antigravity.txt GET /antigravity/callback
 
-mkdir -p "$VERIFY_EVIDENCE_DIR/blocked-surfaces"
+# isolated-errors
+expect_ok alpha-search "$HTTP" --allow-fail --api --save isolated-errors/alpha-search.txt \
+  POST /v1/alpha/search \
+  --json "{\"id\":\"verify-search\",\"model\":\"${VERIFY_MODEL_ALIAS}\"}"
+not_mock_success "$VERIFY_EVIDENCE_DIR/isolated-errors/alpha-search.txt" || failx alpha-search-leaked
+expect_ok alpha-search-codex "$HTTP" --allow-fail --api --save isolated-errors/alpha-search-codex.txt \
+  POST /backend-api/codex/alpha/search \
+  --json "{\"id\":\"verify-search\",\"model\":\"${VERIFY_MODEL_ALIAS}\"}"
+not_mock_success "$VERIFY_EVIDENCE_DIR/isolated-errors/alpha-search-codex.txt" || failx alpha-search-codex-leaked
+
+expect_ok videos "$HTTP" --allow-fail --api --save isolated-errors/videos.txt \
+  POST /v1/videos \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a clip\"}"
+not_mock_success "$VERIFY_EVIDENCE_DIR/isolated-errors/videos.txt" || failx videos-leaked
+expect_ok videos-generations "$HTTP" --allow-fail --api --save isolated-errors/videos-generations.txt \
+  POST /v1/videos/generations \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a clip\"}"
+expect_ok videos-edits "$HTTP" --allow-fail --api --save isolated-errors/videos-edits.txt \
+  POST /v1/videos/edits \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a clip\"}"
+expect_ok videos-extensions "$HTTP" --allow-fail --api --save isolated-errors/videos-extensions.txt \
+  POST /v1/videos/extensions \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a clip\"}"
+expect_ok videos-retrieve "$HTTP" --allow-fail --api --save isolated-errors/videos-retrieve.txt \
+  GET /v1/videos/verify-missing
+expect_ok openai-videos "$HTTP" --allow-fail --api --save isolated-errors/openai-videos.txt \
+  POST /openai/v1/videos \
+  --json "{\"model\":\"${VERIFY_MODEL_ALIAS}\",\"prompt\":\"a clip\"}"
+expect_ok openai-videos-get "$HTTP" --allow-fail --api --save isolated-errors/openai-videos-get.txt \
+  GET /openai/v1/videos/verify-missing
+expect_ok openai-videos-content "$HTTP" --allow-fail --api --save isolated-errors/openai-videos-content.txt \
+  GET /openai/v1/videos/verify-missing/content
+
+expect_ok keep-alive "$HTTP" --allow-fail --save isolated-errors/keep-alive.txt GET /keep-alive
+grep -q 'HTTP 404' "$VERIFY_EVIDENCE_DIR/isolated-errors/keep-alive.txt" || failx keep-alive-status
+expect_ok management-html "$HTTP" --allow-fail --save isolated-errors/management-html.txt GET /management.html
+
 cat > "$VERIFY_EVIDENCE_DIR/blocked-surfaces/notes.txt" <<EOF
 feature_id: blocked-surfaces
 skipped:
   - oauth-login (需要真实提供方账号)
   - tui (需要专用 PTY)
-  - management-panel (本轮 disable-control-panel=true)
   - realtime-live (需要 WS 与 Codex/Live 凭据)
-  - videos (无视频上游 mock)
-  - plugins / plugin-store (会访问网络仓库)
-  - keep-alive (默认未注册)
+  - GET /v1/responses WebSocket
+  - GET /backend-api/codex/responses WebSocket
+  - plugins-store / plugin-store install (会访问网络仓库)
   - GET /v0/management/latest-version (打 GitHub)
   - GET /v0/management/*-auth-url (启动真实 OAuth)
+  - POST /v0/management/api-call (向任意上游发请求)
+  - POST /v0/management/vertex/import (导入真实密钥)
+  - --vertex-import / --home-jwt
 RUN_ID: ${VERIFY_RUN_ID}
 EOF
 cat > "$VERIFY_EVIDENCE_DIR/NOTES.txt" <<EOF
 feature_map: drive-all
+inventory: features/routes.md
 RUN_ID: ${VERIFY_RUN_ID}
 BASE_URL: ${VERIFY_BASE_URL}
-driveable_paths_exercised: health, auth/models, chat, stream, claude, gemini, responses, completions, images, management read/write, oauth callbacks
+driveable_success: health, cli-help, auth/models, chat, stream, claude, gemini generate/stream/get, interactions, responses, compact, completions, images, images-edits, management read/write, management settings, oauth callbacks
+isolated_errors: alpha-search, videos, keep-alive, management.html
 EOF
 
 echo '---'

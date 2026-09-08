@@ -28,5 +28,5 @@ Responses 让 Responses API 客户端调用 `POST /v1/responses`。Codex CLI 还
 ## 注意事项
 
 - `GET /v1/responses` 是 WebSocket。隔离 HTTP 配方不覆盖它。见 blocked-surfaces。
-- `POST /v1/responses/compact` 是另一入口。需要时另存证据，不要用 success 冒充 compact。
+- `POST /v1/responses/compact` 见 [responses-compact](./responses-compact.md)。不要用 success 冒充 compact。
 - 流式 Responses 与非流式不同形。本基线是非流式。

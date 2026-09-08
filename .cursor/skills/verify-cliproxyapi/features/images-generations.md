@@ -21,7 +21,7 @@
 
 - **成功。** 执行 `scripts/http --api --save images-generations/success.txt POST /v1/images/generations --json '{"model":"verify-mock","prompt":"a dot"}'`。HTTP `200`。data 中有 mock 标记（如 `revised_prompt` 或 `b64_json`）。
 - **缺少鉴权。** 不加 `--api`。期望 HTTP `401`。
-- **证明。** 保留 success。`/v1/images/edits` 是另一入口，需要时另存，不要用 generations 冒充。
+- **证明。** 保留 success。`/v1/images/edits` 见 [images-edits](./images-edits.md)。不要用 generations 冒充 edits。
 
 ## 注意事项
 

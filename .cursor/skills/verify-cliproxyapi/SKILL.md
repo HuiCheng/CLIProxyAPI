@@ -1,6 +1,6 @@
 ---
 name: verify-cliproxyapi
-description: "按真实客户端方式驱动 CLIProxyAPI 的全部用户 HTTP 入口（OpenAI/Gemini/Claude 兼容代理、Responses、图片、管理 API、OAuth 回调）。启动隔离实例、doctor、按功能地图或 drive-all 取证。代码变更后证明代理行为时使用。文档与脚本输出为中文。"
+description: "按真实客户端方式驱动 CLIProxyAPI 的全部用户入口（OpenAI/Gemini/Claude/Responses/图片、Gemini interactions、管理设置、CLI --help，以及隔离下的视频/alpha-search 失败）。启动隔离实例、doctor、按路由清单或 drive-all 取证。代码变更后证明代理行为时使用。文档与脚本输出为中文。"
 ---
 
 # 验证 CLIProxyAPI
@@ -84,14 +84,20 @@ cleanup 只杀本轮 PID，删 `run/`，保留 `evidence/`。
 | `POST /v1/messages` | Claude |
 | `POST /v1/messages/count_tokens` | Claude 计 token |
 | `POST /v1/responses` | Responses |
+| `POST /v1/responses/compact` | Responses compact |
 | `POST /backend-api/codex/responses` | Codex CLI 别名 |
 | `GET /v1beta/models` | Gemini 模型列表 |
+| `GET /v1beta/models/{alias}` | Gemini 单个模型 |
 | `POST /v1beta/models/{alias}:generateContent` | Gemini 生成 |
-| `POST /v1/images/generations` | 图片 |
+| `POST /v1beta/models/{alias}:streamGenerateContent` | Gemini 流式 |
+| `POST /v1beta/interactions` | Gemini interactions |
+| `POST /v1/images/generations` | 图片生成 |
+| `POST /v1/images/edits` | 图片编辑 |
 | `GET /anthropic/callback` 等 | OAuth 回调 HTML |
+| `"$VERIFY_BIN" --help` | CLI 旗标 |
 | `Authorization: Bearer <VERIFY_MGMT_KEY>` 或 `X-Management-Key` | `/v0/management/*` |
 
-先读 `features/README.md`。地图列出的入口漏一个，证明就不完整。
+先读 `features/README.md` 与 `features/routes.md`。清单列出的入口漏一个，证明就不完整。
 
 ## 证据（Evidence）
 
@@ -127,4 +133,4 @@ cleanup 只杀本轮 PID，删 `run/`，保留 `evidence/`。
 
 ## 功能地图
 
-见 [features/README.md](features/README.md)。
+见 [features/README.md](features/README.md) 与 [features/routes.md](features/routes.md)。

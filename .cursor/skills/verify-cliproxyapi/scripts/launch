@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch an isolated CLIProxyAPI verification instance + local OpenAI-compat mock upstream.
+# 启动隔离的 CLIProxyAPI 验证实例，以及本地 OpenAI 兼容 mock 上游。
 set -euo pipefail
 
 . "$(cd "$(dirname "$0")" && pwd)/common.sh"
@@ -11,8 +11,8 @@ if [[ -f "$ACTIVE_RUN_FILE" ]]; then
   if [[ -n "$existing" ]]; then
     verify_paths_for_run "$existing"
     if [[ -f "$VERIFY_PID_FILE" ]] && kill -0 "$(cat "$VERIFY_PID_FILE")" 2>/dev/null; then
-      echo "Refusing to launch: active verification run $existing is still up." >&2
-      echo "Run scripts/cleanup first, or export a new VERIFY_RUN_ID after cleanup." >&2
+      echo "拒绝启动：活动验证运行 $existing 仍在运行。" >&2
+      echo "请先执行 scripts/cleanup；或在 cleanup 之后再 export 新的 VERIFY_RUN_ID。" >&2
       exit 1
     fi
   fi
@@ -32,16 +32,16 @@ VERIFY_MOCK_KEY="${VERIFY_MOCK_KEY:-verify-mock-upstream-key}"
 VERIFY_MODEL_ALIAS="${VERIFY_MODEL_ALIAS:-verify-mock}"
 VERIFY_UPSTREAM_MODEL="${VERIFY_UPSTREAM_MODEL:-mock-model}"
 
-# Never use template keys from config.example.yaml — they trigger example-api-key safe mode.
+# 绝不要使用 config.example.yaml 中的模板密钥——会触发示例 API key 安全模式。
 case "$VERIFY_API_KEY" in
   your-api-key-1|your-api-key-2|your-api-key-3)
-    echo "VERIFY_API_KEY must not be an example template value" >&2
+    echo "VERIFY_API_KEY 不能是示例模板值" >&2
     exit 1
     ;;
 esac
 
 cat >"$VERIFY_CONFIG" <<EOF
-# Verification scaffolding only — created by verify-cliproxyapi launch; removed by cleanup.
+# 仅用于验证脚手架 — 由 verify-cliproxyapi launch 创建，由 cleanup 删除。
 host: "${VERIFY_HOST}"
 port: ${VERIFY_PORT}
 auth-dir: "${VERIFY_AUTH_DIR}"
@@ -63,27 +63,27 @@ openai-compatibility:
         alias: "${VERIFY_MODEL_ALIAS}"
 EOF
 
-echo "Building CLIProxyAPI binary into $VERIFY_BIN ..."
+echo "正在将 CLIProxyAPI 构建到 $VERIFY_BIN ..."
 (
   cd "$REPO_ROOT"
   go build -o "$VERIFY_BIN" ./cmd/server
 )
 
-echo "Starting mock upstream on ${VERIFY_HOST}:${VERIFY_MOCK_PORT} ..."
+echo "正在启动 mock 上游 ${VERIFY_HOST}:${VERIFY_MOCK_PORT} ..."
 VERIFY_MOCK_PORT="$VERIFY_MOCK_PORT" VERIFY_HOST="$VERIFY_HOST" VERIFY_UPSTREAM_MODEL="$VERIFY_UPSTREAM_MODEL" \
   "$SCRIPTS_DIR/mock-upstream" >"$VERIFY_MOCK_LOG" 2>&1 &
 echo $! >"$VERIFY_MOCK_PID_FILE"
 
 verify_wait_http_ok "http://${VERIFY_HOST}:${VERIFY_MOCK_PORT}/healthz" 40
 
-echo "Starting CLIProxyAPI on ${VERIFY_HOST}:${VERIFY_PORT} ..."
+echo "正在启动 CLIProxyAPI ${VERIFY_HOST}:${VERIFY_PORT} ..."
 "$VERIFY_BIN" --config "$VERIFY_CONFIG" --local-model >"$VERIFY_LOG" 2>&1 &
 echo $! >"$VERIFY_PID_FILE"
 
 verify_wait_http_ok "http://${VERIFY_HOST}:${VERIFY_PORT}/healthz" 60
 
 if ! grep -q "API server started successfully on: ${VERIFY_HOST}:${VERIFY_PORT}" "$VERIFY_LOG"; then
-  echo "Server log missing ready line; dumping log:" >&2
+  echo "服务日志缺少就绪行；正在打印日志：" >&2
   tail -n 80 "$VERIFY_LOG" >&2 || true
   exit 1
 fi
@@ -111,7 +111,7 @@ EOF
 printf '%s\n' "$VERIFY_RUN_ID" >"$ACTIVE_RUN_FILE"
 
 cat <<EOF
-Launched verification instance
+已启动验证实例
   RUN_ID:        ${VERIFY_RUN_ID}
   BASE_URL:      http://${VERIFY_HOST}:${VERIFY_PORT}
   MOCK_URL:      http://${VERIFY_HOST}:${VERIFY_MOCK_PORT}
@@ -121,5 +121,5 @@ Launched verification instance
   RUN_DIR:       ${VERIFY_RUN_DIR}
   EVIDENCE_DIR:  ${VERIFY_EVIDENCE_DIR}
   LOG:           ${VERIFY_LOG}
-Next: scripts/doctor
+下一步：scripts/doctor
 EOF

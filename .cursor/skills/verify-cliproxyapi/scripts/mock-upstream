@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tiny OpenAI-compatible mock upstream for verification scaffolding.
-# Listens on VERIFY_HOST:VERIFY_MOCK_PORT (defaults 127.0.0.1:18318).
+# 用于验证脚手架的小型 OpenAI 兼容 mock 上游。
+# 监听 VERIFY_HOST:VERIFY_MOCK_PORT（默认 127.0.0.1:18318）。
 set -euo pipefail
 
 HOST="${VERIFY_HOST:-127.0.0.1}"
@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
         if path.endswith("/messages"):
-            # Minimal Anthropic-shaped response if ever hit directly.
+            # 若被直接命中时的最小 Anthropic 形态响应。
             self._json(200, {
                 "id": "msg_verify_mock",
                 "type": "message",
@@ -70,6 +70,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(404, {"error": {"message": "not found", "path": path}})
 
-print(f"verify-mock-upstream listening on http://{host}:{port_s}", flush=True)
+print(f"verify-mock-upstream 正在监听 http://{host}:{port_s}", flush=True)
 ThreadingHTTPServer((host, port_s), Handler).serve_forever()
 PY

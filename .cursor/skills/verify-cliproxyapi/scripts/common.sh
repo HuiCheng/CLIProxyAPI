@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Shared paths and helpers for verify-cliproxyapi.
-# Source from other scripts:  . "$(dirname "$0")/common.sh"
+# verify-cliproxyapi 共享路径与辅助函数。
+# 其他脚本通过以下方式引用：. "$(dirname "$0")/common.sh"
 
 set -euo pipefail
 
@@ -16,7 +16,7 @@ verify_require_cmd() {
   local cmd
   for cmd in "$@"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-      echo "doctor/launch: missing required command: $cmd" >&2
+      echo "doctor/launch: 缺少必需命令: $cmd" >&2
       return 1
     fi
   done
@@ -35,7 +35,7 @@ verify_resolve_run_id() {
     tr -d '[:space:]' <"$ACTIVE_RUN_FILE"
     return 0
   fi
-  echo "No active verification run. Export VERIFY_RUN_ID or run scripts/launch first." >&2
+  echo "没有活动的验证运行。请先 export VERIFY_RUN_ID，或执行 scripts/launch。" >&2
   return 1
 }
 
@@ -59,7 +59,7 @@ verify_load_meta() {
   run_id="$(verify_resolve_run_id)"
   verify_paths_for_run "$run_id"
   if [[ ! -f "$VERIFY_META" ]]; then
-    echo "Missing run metadata: $VERIFY_META" >&2
+    echo "缺少运行元数据: $VERIFY_META" >&2
     return 1
   fi
   # shellcheck disable=SC1090
@@ -92,7 +92,7 @@ for port in range(preferred, preferred + 200):
     finally:
         s.close()
 else:
-    raise SystemExit("no free port found")
+    raise SystemExit("找不到空闲端口")
 PY
     return
   fi
@@ -109,6 +109,6 @@ verify_wait_http_ok() {
     fi
     sleep 0.25
   done
-  echo "Timed out waiting for $url" >&2
+  echo "等待 $url 超时" >&2
   return 1
 }

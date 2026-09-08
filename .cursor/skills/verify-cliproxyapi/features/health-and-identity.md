@@ -1,33 +1,33 @@
-# Health and identity
+# 健康检查与身份
 
-Health and identity let a client confirm the proxy process is up and that the responding server is CLIProxyAPI, without sending an API key.
+健康检查与身份让客户端在不发送 API key 的情况下，确认代理进程已启动，且响应方是 CLIProxyAPI。
 
-## Sub-features
+## 子功能
 
-- `healthz-get` returns JSON liveness on `GET /healthz`.
-- `healthz-head` accepts `HEAD /healthz` with status 200 and no body requirement.
-- `root-identity` returns the root JSON message naming CLI Proxy API Server and listing core endpoints.
+- `healthz-get`：`GET /healthz` 返回 JSON 存活状态。
+- `healthz-head`：接受 `HEAD /healthz`，状态码 200，不要求响应体。
+- `root-identity`：根路径 JSON 消息标明 CLI Proxy API Server，并列出核心端点。
 
-## How to get to it (user POV)
+## 如何到达（用户视角）
 
-- Call `GET /healthz` on the proxy base URL.
-- Call `HEAD /healthz` on the proxy base URL.
-- Call `GET /` on the proxy base URL.
+- 对代理 base URL 调用 `GET /healthz`。
+- 对代理 base URL 调用 `HEAD /healthz`。
+- 对代理 base URL 调用 `GET /`。
 
-## Driving it with scripts/http
+## 用 scripts/http 驱动
 
-Preconditions:
+前置条件：
 
-- Verification instance is healthy (`scripts/doctor` PASS).
-- No API key is required for these routes.
+- 验证实例健康（`scripts/doctor` PASS）。
+- 这些路由不需要 API key。
 
-- **Liveness GET.** Request health. Run `scripts/http --save health-and-identity/healthz.txt GET /healthz`. HTTP `200` and body contain `"status":"ok"`.
-- **Liveness HEAD.** Confirm HEAD works. After `source scripts/common.sh && verify_load_meta`, run `curl -sS -o /dev/null -w '%{http_code}\n' -I "$VERIFY_BASE_URL/healthz"`. HTTP `200`.
-- **Root identity.** Request root. Run `scripts/http --save health-and-identity/root.txt GET /`. HTTP `200`, body contains `"message":"CLI Proxy API Server"` and endpoint string `GET /v1/models`.
-- **Proof.** Keep both saved response files under `evidence/health-and-identity/`. They must show status `ok` and the identity message.
+- **存活 GET。** 请求健康检查。执行 `scripts/http --save health-and-identity/healthz.txt GET /healthz`。HTTP `200`，响应体含 `"status":"ok"`。
+- **存活 HEAD。** 确认 HEAD 可用。在 `source scripts/common.sh && verify_load_meta` 之后执行 `curl -sS -o /dev/null -w '%{http_code}\n' -I "$VERIFY_BASE_URL/healthz"`。HTTP `200`。
+- **根身份。** 请求根路径。执行 `scripts/http --save health-and-identity/root.txt GET /`。HTTP `200`，响应体含 `"message":"CLI Proxy API Server"` 以及端点字符串 `GET /v1/models`。
+- **证明。** 将两份已保存响应保留在 `evidence/health-and-identity/`。必须能看到 status `ok` 与身份文案。
 
-## Gotchas
+## 注意事项
 
-- `/healthz` is public; a 401 here means you hit the wrong process or a different service on the port.
-- Example-api-key safe mode can replace `GET /` with an HTML warning page when template keys are configured — verification launch must not use those keys.
-- Doctor already checks these routes; a feature proof still needs saved response artifacts.
+- `/healthz` 是公开的；这里出现 401 说明打到了错误进程或同端口上的其他服务。
+- 配置了模板密钥时，示例 API key 安全模式可能把 `GET /` 换成 HTML 警告页——验证 launch 绝不能使用那些密钥。
+- doctor 已检查这些路由；功能证明仍需要保存响应产物。

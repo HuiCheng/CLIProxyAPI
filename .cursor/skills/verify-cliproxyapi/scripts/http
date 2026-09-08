@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Authenticated HTTP helper against the active verification instance.
-# Usage:
+# 针对活动验证实例的带鉴权 HTTP 辅助脚本。
+# 用法：
 #   scripts/http GET /healthz
 #   scripts/http --api GET /v1/models
 #   scripts/http --mgmt GET /v0/management/api-keys
@@ -27,14 +27,14 @@ while [[ $# -gt 0 ]]; do
     --json) json_body="$2"; shift 2 ;;
     GET|POST|PUT|PATCH|DELETE|HEAD) method="$1"; shift; path="$1"; shift ;;
     *)
-      echo "Unknown argument: $1" >&2
+      echo "未知参数: $1" >&2
       exit 2
       ;;
   esac
 done
 
 if [[ -z "$method" || -z "$path" ]]; then
-  echo "Usage: scripts/http [--api|--mgmt] [--save PATH] [--json BODY] METHOD /path" >&2
+  echo "用法: scripts/http [--api|--mgmt] [--save PATH] [--json BODY] METHOD /path" >&2
   exit 2
 fi
 
@@ -63,9 +63,9 @@ if [[ -n "$save_path" ]]; then
     echo "METHOD ${method}"
     echo "URL ${url}"
     echo "AUTH ${auth_mode}"
-    echo "---- response headers ----"
+    echo "---- 响应头 ----"
     cat /tmp/cliproxyapi-http-headers.txt
-    echo "---- response body ----"
+    echo "---- 响应体 ----"
     printf '%s\n' "$body"
   } >"$save_path"
 fi
@@ -73,7 +73,7 @@ fi
 printf 'HTTP %s\n' "$code"
 printf '%s\n' "$body"
 
-# Non-2xx exits non-zero so feature recipes can fail closed.
+# 非 2xx 以非零退出，便于功能配方失败即停。
 case "$code" in
   2??) exit 0 ;;
   *) exit 1 ;;

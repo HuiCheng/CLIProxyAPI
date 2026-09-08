@@ -1,58 +1,58 @@
 ---
 name: verify-cliproxyapi
-description: "Drive CLIProxyAPI's HTTP surface (OpenAI/Gemini/Claude-compatible proxy + Management API) the way a client does — launch an isolated instance, doctor it, exercise mapped routes with curl helpers, and capture response evidence. Use when proving proxy behavior, auth, model listing, management endpoints, or chat completions after code changes."
+description: "按真实客户端方式驱动 CLIProxyAPI 的 HTTP 面（OpenAI/Gemini/Claude 兼容代理 + 管理 API）：启动隔离实例、做 doctor 检查、用 curl 辅助脚本演练已映射路由并保存响应证据。在证明代理行为、鉴权、模型列表、管理端点或聊天补全时使用。文档与脚本面向输出为中文。"
 ---
 
-# Verify CLIProxyAPI
+# 验证 CLIProxyAPI
 
-CLIProxyAPI is a Go HTTP proxy that exposes OpenAI/Gemini/Claude/Codex-compatible APIs plus a Management API. The primary user surface for verification is **HTTP** (curl). Secondary surfaces exist (`--tui` terminal UI, optional `/management.html` control panel) but are out of scope for this skill's default harness — drive the HTTP routes clients actually call.
+CLIProxyAPI 是一个 Go HTTP 代理，对外提供 OpenAI/Gemini/Claude/Codex 兼容 API 以及管理 API。本技能默认验证的主用户面是 **HTTP**（curl）。次要面（`--tui` 终端 UI、可选的 `/management.html` 控制面板）不在默认编排范围内——请驱动客户端实际调用的 HTTP 路由。
 
-Never drive a shared or pre-existing instance. Always launch an isolated run under `/tmp/cliproxyapi-verify-<RUN_ID>/`.
+禁止驱动共享或已有实例。必须启动隔离运行目录：`/tmp/cliproxyapi-verify-<RUN_ID>/`。
 
-## Launch
+## 启动（Launch）
 
-Exact sequence from the repo root:
+在仓库根目录执行：
 
 ```bash
 .cursor/skills/verify-cliproxyapi/scripts/launch
 .cursor/skills/verify-cliproxyapi/scripts/doctor
 ```
 
-What `scripts/launch` does:
+`scripts/launch` 会：
 
-1. Allocates `VERIFY_RUN_ID` and free ports on `127.0.0.1`.
-2. Writes verification scaffolding config (not for production) with non-template `api-keys`, a management `secret-key`, `disable-control-panel: true`, isolated `auth-dir`, and an `openai-compatibility` provider aimed at a local mock upstream.
-3. Builds `./cmd/server` into the run dir.
-4. Starts `scripts/mock-upstream` then the proxy with `--config <run>/config.yaml --local-model`.
-5. Ready when log contains `API server started successfully on: 127.0.0.1:<port>` **and** `GET /healthz` returns `{"status":"ok"}`.
+1. 分配 `VERIFY_RUN_ID` 以及 `127.0.0.1` 上的空闲端口。
+2. 写入仅用于验证的脚手架配置（非生产）：非模板 `api-keys`、管理 `secret-key`、`disable-control-panel: true`、隔离 `auth-dir`，以及指向本地 mock 上游的 `openai-compatibility` 提供方。
+3. 将 `./cmd/server` 构建到运行目录。
+4. 先启动 `scripts/mock-upstream`，再以 `--config <run>/config.yaml --local-model` 启动代理。
+5. 就绪条件：日志出现 `API server started successfully on: 127.0.0.1:<port>`，且 `GET /healthz` 返回 `{"status":"ok"}`。
 
-Environment overrides (optional): `VERIFY_RUN_ID`, `VERIFY_HOST`, `VERIFY_PORT`, `VERIFY_MOCK_PORT`, `VERIFY_API_KEY`, `VERIFY_MGMT_KEY`, `VERIFY_MODEL_ALIAS`.
+可选环境变量覆盖：`VERIFY_RUN_ID`、`VERIFY_HOST`、`VERIFY_PORT`、`VERIFY_MOCK_PORT`、`VERIFY_API_KEY`、`VERIFY_MGMT_KEY`、`VERIFY_MODEL_ALIAS`。
 
-Teardown:
+拆除：
 
 ```bash
 .cursor/skills/verify-cliproxyapi/scripts/cleanup
 ```
 
-Cleanup kills only the PIDs recorded for this run and deletes the `run/` directory. Evidence under `evidence/` is preserved.
+cleanup 只杀死本轮记录的 PID，并删除 `run/` 目录；`evidence/` 下的证据保留。
 
-Isolation rules:
+隔离规则：
 
-- One active verification run at a time (`.cursor/skills/verify-cliproxyapi/.active-run`). Launch refuses if that run's server PID is still alive.
-- Do not use `config.example.yaml` api-keys (`your-api-key-1/2/3`) — they enable example-api-key safe mode and block `/v1/*`.
-- Do not reuse the user's real `~/.cli-proxy-api` auth dir or production `config.yaml`.
+- 同时只允许一个活动验证运行（`.cursor/skills/verify-cliproxyapi/.active-run`）。若该运行的服务 PID 仍存活，launch 会拒绝启动。
+- 不要使用 `config.example.yaml` 中的 api-keys（`your-api-key-1/2/3`）——会触发示例密钥安全模式并拦截 `/v1/*`。
+- 不要复用用户真实的 `~/.cli-proxy-api` 鉴权目录或生产 `config.yaml`。
 
-## Doctor
+## 诊断（Doctor）
 
 ```bash
 .cursor/skills/verify-cliproxyapi/scripts/doctor
 ```
 
-Read-only checks: server + mock PIDs alive, `/healthz` ok, `/` identity message `CLI Proxy API Server`, `/v1/models` with the verification API key lists `VERIFY_MODEL_ALIAS`, `/v0/management/api-keys` accepts the management key. Exit `0` only when all pass. Run doctor first whenever anything looks off.
+只读检查：服务与 mock 的 PID 存活、`/healthz` 正常、`/` 身份文案为 `CLI Proxy API Server`、带验证 API key 的 `/v1/models` 列出 `VERIFY_MODEL_ALIAS`、`/v0/management/api-keys` 接受管理密钥。全部通过才以退出码 `0` 结束。任何异常时先跑 doctor。
 
-## Drive
+## 驱动（Drive）
 
-Prefer the HTTP helper (loads active-run metadata, attaches Bearer auth, can save evidence):
+优先使用 HTTP 辅助脚本（加载活动运行元数据、附加 Bearer 鉴权、可保存证据）：
 
 ```bash
 .cursor/skills/verify-cliproxyapi/scripts/http GET /healthz
@@ -63,62 +63,62 @@ Prefer the HTTP helper (loads active-run metadata, attaches Bearer auth, can sav
   --json '{"model":"verify-mock","messages":[{"role":"user","content":"ping"}]}'
 ```
 
-Stable handles (paths / headers), not UI coordinates:
+稳定句柄（路径 / 请求头），不要用 UI 坐标：
 
-| Handle | Meaning |
-|--------|---------|
-| `GET /healthz` | Liveness JSON `{"status":"ok"}` |
-| `GET /` | Identity JSON with `"message":"CLI Proxy API Server"` |
-| `Authorization: Bearer <VERIFY_API_KEY>` | Client access to `/v1/*`, `/v1beta/*`, etc. |
-| `GET /v1/models` | OpenAI-style model list |
-| `POST /v1/chat/completions` | OpenAI chat completions |
-| `Authorization: Bearer <VERIFY_MGMT_KEY>` or `X-Management-Key` | Management API `/v0/management/*` |
-| `GET /v0/management/api-keys` | Configured client API keys |
-| `GET /v0/management/config` | Sanitized runtime config snapshot |
+| 句柄 | 含义 |
+|------|------|
+| `GET /healthz` | 存活 JSON `{"status":"ok"}` |
+| `GET /` | 身份 JSON，含 `"message":"CLI Proxy API Server"` |
+| `Authorization: Bearer <VERIFY_API_KEY>` | 客户端访问 `/v1/*`、`/v1beta/*` 等 |
+| `GET /v1/models` | OpenAI 风格模型列表 |
+| `POST /v1/chat/completions` | OpenAI 聊天补全 |
+| `Authorization: Bearer <VERIFY_MGMT_KEY>` 或 `X-Management-Key` | 管理 API `/v0/management/*` |
+| `GET /v0/management/api-keys` | 已配置的客户端 API keys |
+| `GET /v0/management/config` | 脱敏后的运行时配置快照 |
 
-Read `features/README.md` and the matching feature file before driving. A proof that only hits one convenient entry point is incomplete when the map lists others.
+驱动前先读 `features/README.md` 与对应功能文件。若功能图列出多个入口，只打一个方便入口的证明不完整。
 
-## Evidence
+## 证据（Evidence）
 
-Store proof under `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/<feature-id>/` (also available as `VERIFY_EVIDENCE_DIR` after launch). Relative `--save` paths for `scripts/http` land there automatically.
+证明材料放在 `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/<feature-id>/`（launch 后也可用 `VERIFY_EVIDENCE_DIR`）。`scripts/http` 的相对 `--save` 路径会自动落到该目录。
 
-Proof standards:
+证明标准：
 
-- Exercise real client routes (`/v1/...`, `/v0/management/...`), not internal setters or test-only hooks.
-- Capture the request action and the resulting HTTP status + body (and a second confirming read for mutations).
-- For chat completions, prove the mock upstream path by asserting assistant content `pong-from-mock` in the proxy response — that string only exists in `scripts/mock-upstream`.
-- Do not treat unit tests or `go test` as user-path proof for this skill.
-- Mocks are allowed only at the production boundary already modeled by `openai-compatibility` (external provider HTTP). Do not stub Gin handlers inside the process.
+- 走真实客户端路由（`/v1/...`、`/v0/management/...`），不要走内部 setter 或仅测试钩子。
+- 同时记录请求动作与结果 HTTP 状态码 + 响应体（写操作还要有二次确认读取）。
+- 对聊天补全，通过断言代理响应中的助手内容 `pong-from-mock` 证明经过 mock 上游——该字符串只存在于 `scripts/mock-upstream`。
+- 不要把单元测试或 `go test` 当作本技能的用户路径证明。
+- mock 只允许出现在 `openai-compatibility` 已建模的生产边界（外部提供方 HTTP）。不要在进程内 stub Gin handler。
 
-Suggested artifact names:
+建议产物名：
 
-- `evidence/<feature>/request.env` — method, path, auth mode used
-- `evidence/<feature>/response.txt` — status, headers, body from `scripts/http --save`
-- `evidence/<feature>/notes.txt` — feature ID and entry points covered
+- `evidence/<feature>/request.env` — 方法、路径、鉴权模式
+- `evidence/<feature>/response.txt` — `scripts/http --save` 的状态码、头、体
+- `evidence/<feature>/notes.txt` — 功能 ID 与覆盖的入口
 
-## Cleanup
+## 清理（Cleanup）
 
 ```bash
 .cursor/skills/verify-cliproxyapi/scripts/cleanup
 ```
 
-Kills the server and mock PIDs from the run's pid files only (never `pkill cli-proxy-api`). Removes `/tmp/cliproxyapi-verify-<RUN_ID>/run/`. Leaves `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/` intact. Clears `.active-run` when it matches.
+只按本轮 pid 文件杀死服务与 mock（绝不 `pkill cli-proxy-api`）。删除 `/tmp/cliproxyapi-verify-<RUN_ID>/run/`。保留 `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/`。匹配时清除 `.active-run`。
 
-After cleanup, confirm evidence files still exist before declaring success.
+清理后须确认证据文件仍在，再宣布成功。
 
-## Helpers
+## 辅助脚本（Helpers）
 
-All scripts are executable and live in `.cursor/skills/verify-cliproxyapi/scripts/`:
+可执行脚本均在 `.cursor/skills/verify-cliproxyapi/scripts/`：
 
-| Script | Invocation | Role |
-|--------|------------|------|
-| `launch` | `scripts/launch` | Build, write scaffolding config, start mock + proxy |
-| `doctor` | `scripts/doctor` | Read-only readiness / ownership check |
-| `http` | `scripts/http [--api\|--mgmt] [--save PATH] [--json BODY] METHOD /path` | Drive authenticated HTTP |
-| `cleanup` | `scripts/cleanup` | Stop this run's processes; keep evidence |
-| `mock-upstream` | started by `launch` | Local OpenAI-compat stub (`pong-from-mock`) |
-| `common.sh` | sourced by the others | Paths, ports, active-run resolution |
+| 脚本 | 调用方式 | 作用 |
+|------|----------|------|
+| `launch` | `scripts/launch` | 构建、写入脚手架配置、启动 mock + 代理 |
+| `doctor` | `scripts/doctor` | 只读就绪 / 归属检查 |
+| `http` | `scripts/http [--api\|--mgmt] [--save PATH] [--json BODY] METHOD /path` | 驱动带鉴权的 HTTP |
+| `cleanup` | `scripts/cleanup` | 停止本轮进程；保留证据 |
+| `mock-upstream` | 由 `launch` 启动 | 本地 OpenAI 兼容桩（`pong-from-mock`） |
+| `common.sh` | 被其他脚本 source | 路径、端口、活动运行解析 |
 
-## Feature map
+## 功能地图
 
-See [features/README.md](features/README.md).
+见 [features/README.md](features/README.md)。

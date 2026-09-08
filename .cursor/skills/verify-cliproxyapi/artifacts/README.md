@@ -1,5 +1,5 @@
-# Evidence directory
+# 证据目录
 
-Verification proofs are written under `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/` by `scripts/http --save` and feature recipes.
+验证证明由 `scripts/http --save` 与功能配方写入 `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/`。
 
-Optional local copies may be placed here during a walkthrough, but this directory is not the canonical evidence root. Cleanup must never delete `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/`.
+演示过程中可以把可选本地副本放到此处，但本目录不是权威证据根。cleanup 绝不能删除 `/tmp/cliproxyapi-verify-<RUN_ID>/evidence/`。
